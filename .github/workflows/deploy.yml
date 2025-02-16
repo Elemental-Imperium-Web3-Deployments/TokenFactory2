@@ -1,86 +1,115 @@
-name: Deploy to Vercel
+name: Deploy Application
 
 on:
   push:
-    branches: [main]
+    branches: [ main, develop ]
   pull_request:
-    branches: [main]
-
-env:
-  TATUM_API_KEY: ${{ secrets.TATUM_API_KEY }}
-  POLYGON_NETWORK: mainnet
-  NODE_ENV: production
+    branches: [ main ]
 
 jobs:
-  validate:
+  security:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v2
-        with:
-          node-version: '16'
-
-      - name: Validate Tatum Configuration
-        run: |
-          curl -X GET "https://api.tatum.io/v3/polygon/info" \
-          -H "x-api-key: ${{ secrets.TATUM_API_KEY }}" \
-          -H "Content-Type: application/json"
-
-  deploy:
-    needs: validate
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v2
-
-      - name: Install Vercel CLI
-        run: npm install --global vercel@latest
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v2
-        with:
-          node-version: '16'
-
-      - name: Install Dependencies
-        working-directory: frontend
-        run: npm install
-
-      - name: Pull Vercel Environment Information
-        run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
-
-      - name: Build Project Artifacts
-        run: vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
-
-      - name: Deploy to Vercel
-        run: vercel deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }}
-
-      - name: Create Sentry Release
-        uses: getsentry/action-release@v1
+      - uses: actions/checkout@v3
+      
+      - name: Security Scan
+        uses: snyk/actions/node@master
         env:
-          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
-          SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
-          SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT }}
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+          
+      - name: Run SAST
+        uses: github/codeql-action/analyze@v2
+        
+  build-and-test:
+    needs: security
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
         with:
-          environment: production
+          node-version: '18'
+          cache: 'npm'
+          
+      - name: Install Dependencies
+        run: npm ci
+        
+      - name: Lint
+        run: npm run lint
+        
+      - name: Type Check
+        run: npm run type-check
+        
+      - name: Run Tests
+        run: npm test
+        
+      - name: Build
+        run: npm run build
+        env:
+          REACT_APP_MASTER_CONTROL: ${{ secrets.REACT_APP_MASTER_CONTROL }}
+          REACT_APP_RPC_URL: ${{ secrets.REACT_APP_RPC_URL }}
+          REACT_APP_CHAIN_ID: ${{ secrets.REACT_APP_CHAIN_ID }}
+          REACT_APP_PRICE_FEED_ADDRESS: ${{ secrets.REACT_APP_PRICE_FEED_ADDRESS }}
+        
+      - name: Cache Build
+        uses: actions/cache@v3
+        with:
+          path: build
+          key: ${{ runner.os }}-build-${{ github.sha }}
+      
+      - name: Analyze Bundle Size
+        run: npm run analyze-bundle
+        
+      - name: Check Performance
+        run: npm run lighthouse
 
-      - name: Monitor Deployment
+  deploy-staging:
+    name: Deploy to Staging
+    needs: build-and-test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/develop'
+    environment:
+      name: staging
+    
+    steps:
+      - name: Download Build
+        uses: actions/cache@v3
+        with:
+          path: build
+          key: ${{ runner.os }}-build-${{ github.sha }}
+      
+      - name: Deploy to Staging
+        id: deploy
+        env:
+          REACT_APP_MASTER_CONTROL: ${{ secrets.STAGING_MASTER_CONTROL }}
+          REACT_APP_RPC_URL: ${{ secrets.STAGING_RPC_URL }}
+          REACT_APP_CHAIN_ID: "80001" # Mumbai testnet
+          REACT_APP_PRICE_FEED_ADDRESS: ${{ secrets.STAGING_PRICE_FEED_ADDRESS }}
         run: |
-          curl -X POST "https://api.tatum.io/v3/monitoring" \
-          -H "x-api-key: ${{ secrets.TATUM_API_KEY }}" \
-          -H "Content-Type: application/json" \
-          -d '{
-            "type": "ADDRESS_MONITORING",
-            "address": "${{ secrets.CONTRACT_ADDRESS }}",
-            "chain": "MATIC",
-            "url": "${{ secrets.WEBHOOK_URL }}"
-          }'
+          npm run deploy:staging
 
-      - name: Discord Notification
-        if: always()
-        uses: rjstone/discord-webhook-notify@v1
+  deploy-production:
+    name: Deploy to Production
+    needs: [build-and-test, deploy-staging]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    environment:
+      name: production
+    
+    steps:
+      - name: Download Build
+        uses: actions/cache@v3
         with:
-          severity: info
-          description: Deployment to Vercel
-          details: ${{ github.event.head_commit.message }}
-          webhookUrl: ${{ secrets.DISCORD_WEBHOOK }}
+          path: build
+          key: ${{ runner.os }}-build-${{ github.sha }}
+      
+      - name: Deploy to Production
+        env:
+          REACT_APP_MASTER_CONTROL: ${{ secrets.PROD_MASTER_CONTROL }}
+          REACT_APP_RPC_URL: ${{ secrets.PROD_RPC_URL }}
+          REACT_APP_CHAIN_ID: "137" # Polygon mainnet
+          REACT_APP_PRICE_FEED_ADDRESS: ${{ secrets.PROD_PRICE_FEED_ADDRESS }}
+        run: |
+          npm run deploy:production
