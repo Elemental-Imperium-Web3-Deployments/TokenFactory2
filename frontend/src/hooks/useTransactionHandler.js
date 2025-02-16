@@ -5,10 +5,7 @@ import { handleWeb3Error } from '../utils/errors';
 export const useTransactionHandler = (onSuccess, onError) => {
   const { addTransaction, updateTransaction } = useTransaction();
 
-  const handleTransaction = useCallback(async (
-    transactionFn,
-    { type, amount, description }
-  ) => {
+  return useCallback(async (transactionFn, { type, amount, description }) => {
     try {
       const tx = await transactionFn();
       
@@ -33,6 +30,4 @@ export const useTransactionHandler = (onSuccess, onError) => {
       throw error;
     }
   }, [addTransaction, updateTransaction, onSuccess, onError]);
-
-  return handleTransaction;
 }; 

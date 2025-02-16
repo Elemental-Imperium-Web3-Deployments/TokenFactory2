@@ -71,7 +71,7 @@ jobs:
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/develop'
     environment:
-      name: staging
+      name: qa
     
     steps:
       - name: Download Build
@@ -85,7 +85,7 @@ jobs:
         env:
           REACT_APP_MASTER_CONTROL: ${{ secrets.STAGING_MASTER_CONTROL }}
           REACT_APP_RPC_URL: ${{ secrets.STAGING_RPC_URL }}
-          REACT_APP_CHAIN_ID: "80001" # Mumbai testnet
+          REACT_APP_CHAIN_ID: "80001"
           REACT_APP_PRICE_FEED_ADDRESS: ${{ secrets.STAGING_PRICE_FEED_ADDRESS }}
         run: |
           npm run deploy:staging
@@ -96,7 +96,7 @@ jobs:
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
     environment:
-      name: production
+      name: live
     
     steps:
       - name: Download Build
