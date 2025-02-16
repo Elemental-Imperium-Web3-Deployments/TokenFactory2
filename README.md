@@ -28,7 +28,7 @@ synthetic-stablecoin-project/
 - Node.js >= 16
 - Python >= 3.8
 - Metamask wallet
-- Infura account
+- Tatum account (for RPC endpoint)
 - Polygon RPC endpoint
 
 ## Installation
@@ -54,7 +54,10 @@ pip install -r requirements.txt
 4. Set up environment variables:
 - Copy `.env.example` to `.env` in the root directory
 - Copy `frontend/.env.example` to `frontend/.env`
-- Fill in your configuration values
+- Fill in your configuration values:
+  - Get your Tatum API key from https://dashboard.tatum.io
+  - Set POLYGON_RPC_URL to https://api.tatum.io/v3/polygon/web3/YOUR_TATUM_API_KEY
+  - Configure your private key and other variables
 
 ## Smart Contract Deployment
 

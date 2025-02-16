@@ -18,7 +18,21 @@ load_dotenv()
 
 class TradingAlgorithm:
     def __init__(self):
-        self.w3 = Web3(Web3.HTTPProvider(os.getenv('POLYGON_RPC_URL')))
+        # Initialize Web3 with Tatum provider
+        provider_url = os.getenv('POLYGON_RPC_URL')
+        tatum_api_key = os.getenv('TATUM_API_KEY')
+        
+        # Create custom provider with Tatum headers
+        provider = Web3.HTTPProvider(
+            provider_url,
+            request_kwargs={
+                'headers': {
+                    'x-api-key': tatum_api_key
+                }
+            }
+        )
+        self.w3 = Web3(provider)
+        
         self.private_key = os.getenv('PRIVATE_KEY')
         self.master_control_address = os.getenv('MASTER_CONTROL_ADDRESS')
         
